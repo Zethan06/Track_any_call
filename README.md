@@ -1,108 +1,58 @@
-# CallNav
+# Track_any_call
 
-**Record a Python program once, then Ctrl/Cmd+click its observed implementations in VS Code.**
+**Run Python once, then Ctrl/Cmd+click a call to find the implementation that actually ran.**
 
-CallNav connects a call site to the Python function that actually ran. It helps with registries, dynamically selected subclasses, decorators, `functools.partial`, and supported Ray Actor calls. Navigation happens in your normal `.py` editor, using VS Code's definition UI.
+Track_any_call ships the **CallNav** recorder and VS Code extension. Package, CLI, and editor commands currently use the CallNav name.
 
-[中文](README.zh-CN.md) · [Usage guide](docs/usage.md) · [How it works](docs/architecture.md) · [Contributing](CONTRIBUTING.md)
+[中文](README.zh-CN.md) · [Usage guide](docs/usage.md) · [How it works](docs/architecture.md)
 
-CallNav is an early open source project. It records executed Python call relationships, not function values or a complete execution replay. It has a Python recorder with no runtime dependencies and a VS Code extension with no npm dependencies.
+## Features
 
-## Install and try it
+- **Real dynamic targets:** follow registries, selected subclasses, decorators, `functools.partial`, and supported async calls.
+- **Native VS Code navigation:** use Ctrl/Cmd+click or Go to Definition, with multiple observed targets in the standard chooser. Python/Pylance stays active.
+- **Threads, subprocesses, and Ray:** collect participating Python processes; opt in to connect Ray Actor methods and constructors to worker execution.
+- **Source checks:** fingerprints prevent stale recordings from opening mismatched definitions.
 
-Requirements: Python **3.11+** for the recorder and every Python process being recorded, VS Code **1.85+**, and your application's existing dependencies. The commands below use a POSIX shell. GPU libraries and Ray are optional; the example needs neither.
+## Install
 
-From this source checkout:
+Requires **Python 3.11+** and **VS Code 1.85+**. Activate your application's normal Python environment first.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+git clone https://github.com/Zethan06/Track_any_call.git
+cd Track_any_call
 python -m pip install .
-
-callnav --version
-callnav record --root "$PWD" -- bash examples/mini_pipeline/launch.sh
 python vscode/scripts/package.py
 ```
 
-The last command prints the generated VSIX path. In VS Code, run **Extensions: Install from VSIX…** and select that file. If the `code` command is available, you can build and install it with:
+In VS Code, run **Extensions: Install from VSIX…** and select the generated `.vsix`. For Remote-SSH, install it on the remote workspace host.
+
+## Record and navigate
+
+Run your existing launch script from its usual working directory:
 
 ```bash
-callnav_vsix="$(python vscode/scripts/package.py)"
-code --install-extension "$callnav_vsix"
-```
-
-The Python package and extension are built from this checkout. These instructions do not require a PyPI or Marketplace release.
-
-Open this checkout in VS Code:
-
-1. Run **CallNav: Load Latest Runtime Index** from the Command Palette.
-2. Run **CallNav: Enable Runtime Navigation**.
-3. Open [examples/mini_pipeline/train.py](examples/mini_pipeline/train.py). Ctrl+click `reward_function` in `return reward_function(text)`: VS Code offers the two reward implementations observed in this run.
-4. Click `generate_function` in `await generate_function(...)` to open the selected async plugin.
-
-Use Cmd+click on macOS, or the navigation modifier configured in VS Code. **Go to Definition** also works. The sample runs a complete small rollout → reward → subprocess training → weight sync → cleanup flow on CPU.
-
-## Record your own startup script
-
-Activate the environment you normally use to run your project. Install CallNav there from your source checkout, then run from your project's working directory:
-
-```bash
-# Replace this with the location of your CallNav checkout.
-python -m pip install /path/to/callnav
-
 cd /path/to/your-project
-callnav record --root "$PWD" -- bash ./launch.sh --your-option value
+callnav record --root "$PWD" -- bash ./launch.sh
 ```
 
-Everything after `--` is your original command and its arguments. CallNav keeps the current working directory, terminal output, and command exit status. You can also record Python entry points directly:
+Then open that project in VS Code:
+
+1. **CallNav: Load Latest Runtime Index**
+2. **CallNav: Enable Runtime Navigation**
+3. Ctrl/Cmd+click an observed call.
+
+For Ray and external source trees:
 
 ```bash
-callnav record --root "$PWD" -- python main.py --config config.yaml
-callnav record --root "$PWD" -- python -m your_package
+callnav record --ray --root "$PWD" --include-root ../external-library -- bash ./launch.sh
 ```
 
-Run the same small, representative workload you would normally run, including initialization, rollout and training where relevant. CallNav does not choose a generic "one training step" for arbitrary frameworks; use your application's own step/batch limits.
+For a GPU-free demo, run `callnav record --root "$PWD" -- bash examples/mini_pipeline/launch.sh` from this checkout. See [examples](examples/README.md) for the call sites to try.
 
-Open **your project folder** in VS Code and use the same two CallNav commands. No server-specific paths need to be configured. The default index is `.callnav/latest.json` under the `--root` you chose.
+## Scope
 
-For Remote-SSH, record on the remote host, open that same checkout through Remote-SSH, and install the VSIX in the remote workspace extension host.
+Only executed, supported calls have runtime destinations. Profiling adds overhead; native/CUDA internals and HTTP causal links are outside the graph. Ray workers must receive the recording environment and share accessible paths.
 
-## Additional source trees and Ray
+Recordings live in `.callnav/` and use your checkout's paths. Keep matching source, record again after moving or editing it, and add `.callnav/` to `.gitignore`. Review source paths and launch arguments before sharing records.
 
-Both caller and target must belong to configured source trees. Include external checkouts when you want to navigate into them:
-
-```bash
-callnav record --root "$PWD" \
-  --include-root ../external-library \
-  -- bash ./launch.sh
-```
-
-For supported Ray Actor methods and constructors, opt in with `--ray`:
-
-```bash
-callnav record --ray --root "$PWD" -- python ray_main.py
-```
-
-A call such as `runner.run.remote(config)` can then point to the `run` body observed in the worker. For PATH-based, blocking `ray job submit [options] -- command` launchers, `--ray` also carries recording variables into the job's JSON runtime environment. Ray integration requires instrumented submitters and workers and shared source/recording paths. See the [usage guide](docs/usage.md#ray-and-framework-launchers) for supported launch forms and framework iteration adapters.
-
-## What to expect
-
-- Only executed, supported call sites have runtime destinations. Several observed targets produce several candidates.
-- Files stay in ordinary **Python** mode. Pylance and other static providers continue working; VS Code may combine their definitions with CallNav's observed targets.
-- Changed or unsaved source is rejected for runtime navigation. Save the matching source or record again.
-- Recordings use the paths of your own checkout. Moving an existing recording to another path or machine is not supported; record again there.
-- Python profiling adds overhead. Native/CUDA/JIT internals, HTTP relationships, and uninstrumented processes are outside the recorded graph. See [coverage and limitations](docs/usage.md#coverage-and-limitations).
-- Recordings contain source paths and launch/process arguments. Review them before sharing; arguments can contain credentials.
-
-Every run has its own `.callnav/<run-id>/` directory. Use **CallNav: Load Runtime Index…** to select an older `index.json`. Add `.callnav/` to your project's `.gitignore`.
-
-## Develop
-
-```bash
-python -m pip install -e .
-PYTHONPATH=src python -m unittest discover -s tests -v
-node --test vscode/test/unit.test.js
-python vscode/scripts/package.py
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and [vscode/README.md](vscode/README.md) for extension-host tests. CallNav is [MIT licensed](LICENSE).
+[Detailed setup and troubleshooting](docs/usage.md) · [Contributing and tests](CONTRIBUTING.md) · [MIT license](LICENSE)

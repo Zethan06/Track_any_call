@@ -1,6 +1,8 @@
 # Track_any_call
 
-Track_any_call 记录 Python 程序运行时的函数调用，再根据记录在 VS Code 中跳到对应的实现。录制器、安装包和编辑器命令目前都叫 CallNav。
+Track_any_call 记录 Python 运行时的函数调用，用来确定动态绑定后实际执行的是哪个实现。遇到注册表加载的函数、抽象接口背后的子类方法等调用，可以在 VS Code 中根据本次运行的记录跳到实际执行的函数。
+
+录制器、安装包和编辑器命令目前都叫 CallNav。
 
 [English](README.md) · [详细用法](docs/usage.md) · [实现原理](docs/architecture.md)
 

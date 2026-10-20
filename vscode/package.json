@@ -1,0 +1,35 @@
+{
+  "name": "callnav",
+  "displayName": "CallNav — Runtime Python Navigation",
+  "description": "Jump from Python call sites to implementations observed in a recorded run.",
+  "version": "0.2.0",
+  "publisher": "callnav",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages", "Other"],
+  "extensionKind": ["workspace"],
+  "main": "./src/extension.js",
+  "activationEvents": ["onLanguage:python", "onLanguage:runtime-python"],
+  "scripts": { "test": "node --test test/unit.test.js", "package": "python scripts/package.py" },
+  "contributes": {
+    "commands": [
+      { "command": "callnav.loadIndex", "title": "CallNav: Load Runtime Index…" },
+      { "command": "callnav.loadLatestIndex", "title": "CallNav: Load Latest Runtime Index" },
+      { "command": "callnav.toggleRuntimeNavigation", "title": "CallNav: Toggle Runtime Navigation" },
+      { "command": "callnav.enableRuntimeNavigation", "title": "CallNav: Enable Runtime Navigation" },
+      { "command": "callnav.disableRuntimeNavigation", "title": "CallNav: Disable Runtime Navigation" }
+    ],
+    "languages": [{ "id": "runtime-python", "aliases": ["Python (CallNav Runtime)"], "configuration": "./language-configuration.json" }],
+    "grammars": [{ "language": "runtime-python", "scopeName": "source.callnav-python", "path": "./syntaxes/runtime-python.tmLanguage.json" }],
+    "configuration": {
+      "title": "CallNav",
+      "properties": {
+        "callnav.indexPath": {
+          "type": "string",
+          "default": "${workspaceFolder}/.callnav/latest.json",
+          "description": "Runtime index to load. ${workspaceFolder} resolves against the active document's workspace folder."
+        }
+      }
+    }
+  }
+}

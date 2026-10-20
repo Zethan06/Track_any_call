@@ -1,0 +1,22 @@
+include LICENSE README.md README.zh-CN.md CONTRIBUTING.md pyproject.toml MANIFEST.in
+include .editorconfig .gitattributes .gitignore
+include docs/usage.md docs/architecture.md
+recursive-include .github/workflows *.yml
+recursive-include src/callnav *.py
+recursive-include tests *.py
+recursive-include scripts *.py
+include examples/README.md
+recursive-include examples/mini_pipeline *.py *.sh
+include vscode/package.json vscode/README.md vscode/language-configuration.json
+recursive-include vscode/src *.js
+recursive-include vscode/test *.js
+recursive-include vscode/scripts *.py
+recursive-include vscode/syntaxes *.json
+global-exclude *.py[cod] __pycache__ .DS_Store
+prune validation
+prune .callnav
+prune examples/mini_pipeline/.callnav
+prune .venv
+prune build
+prune dist
+exclude WORKSPACE.md docs/migration-*.json docs/validation.md docs/verl-ray.md

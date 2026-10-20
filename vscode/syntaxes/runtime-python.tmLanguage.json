@@ -1,0 +1,4 @@
+{
+  "scopeName": "source.callnav-python",
+  "patterns": [{ "include": "source.python" }]
+}

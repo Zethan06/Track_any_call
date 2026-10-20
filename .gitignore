@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv*/
+.callnav/
+build/
+dist/
+node_modules/
+.vscode-test/
+*.vsix
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+# Local deployment notes, training evidence, and machine-specific launchers.
+WORKSPACE.md
+validation/
+docs/migration-*.json
+docs/validation.md
+docs/verl-ray.md
+local/

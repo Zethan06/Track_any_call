@@ -1,21 +1,12 @@
 # Track_any_call
 
-**Run Python once, then Ctrl/Cmd+click a call to find the implementation that actually ran.**
-
-Track_any_call ships the **CallNav** recorder and VS Code extension. Package, CLI, and editor commands currently use the CallNav name.
+Track_any_call records Python function calls during a run and uses that record to find their implementations in VS Code. The recorder, packages, and editor commands currently use the name CallNav.
 
 [中文](README.zh-CN.md) · [Usage guide](docs/usage.md) · [How it works](docs/architecture.md)
 
-## Features
-
-- **Real dynamic targets:** follow registries, selected subclasses, decorators, `functools.partial`, and supported async calls.
-- **Native VS Code navigation:** use Ctrl/Cmd+click or Go to Definition, with multiple observed targets in the standard chooser. Python/Pylance stays active.
-- **Threads, subprocesses, and Ray:** collect participating Python processes; opt in to connect Ray Actor methods and constructors to worker execution.
-- **Source checks:** fingerprints prevent stale recordings from opening mismatched definitions.
-
 ## Install
 
-Requires **Python 3.11+** and **VS Code 1.85+**. Activate your application's normal Python environment first.
+Requires Python 3.11+ and VS Code 1.85+. Activate the Python environment you normally use for your project, then install:
 
 ```bash
 git clone https://github.com/Zethan06/Track_any_call.git
@@ -24,35 +15,33 @@ python -m pip install .
 python vscode/scripts/package.py
 ```
 
-In VS Code, run **Extensions: Install from VSIX…** and select the generated `.vsix`. For Remote-SSH, install it on the remote workspace host.
+The last command prints the extension file's location. In the VS Code Command Palette, run `Extensions: Install from VSIX…` and select the generated `.vsix` file. With Remote-SSH, install the extension on the remote host.
 
-## Record and navigate
+## Use
 
-Run your existing launch script from its usual working directory:
+From your project's usual working directory, put `callnav record` before your existing launch command:
 
 ```bash
 cd /path/to/your-project
 callnav record --root "$PWD" -- bash ./launch.sh
 ```
 
-Then open that project in VS Code:
+Put your original command and its arguments after `--`. When the recording finishes, open the same project folder in VS Code, then:
 
-1. **CallNav: Load Latest Runtime Index**
-2. **CallNav: Enable Runtime Navigation**
-3. Ctrl/Cmd+click an observed call.
+1. Run `CallNav: Load Latest Runtime Index`.
+2. Run `CallNav: Enable Runtime Navigation`.
+3. Ctrl+click a call. On macOS, use Cmd+click.
 
-For Ray and external source trees:
+Add `--ray` to record Ray Actor calls. Use `--include-root` for source outside your project directory:
 
 ```bash
 callnav record --ray --root "$PWD" --include-root ../external-library -- bash ./launch.sh
 ```
 
-For a GPU-free demo, run `callnav record --root "$PWD" -- bash examples/mini_pipeline/launch.sh` from this checkout. See [examples](examples/README.md) for the call sites to try.
+Ray workers need to inherit the recording environment and have access to the source and recording directories. See the [Ray setup instructions](docs/usage.md#ray-and-framework-launchers).
 
-## Scope
+Recordings are saved in your project's `.callnav/` directory. Add it to `.gitignore` and record again after editing source or moving the checkout. Check paths and launch arguments before sharing a recording.
 
-Only executed, supported calls have runtime destinations. Profiling adds overhead; native/CUDA internals and HTTP causal links are outside the graph. Ray workers must receive the recording environment and share accessible paths.
+Only calls that ran and were successfully recorded have runtime destinations. Recording adds overhead, so start with a short run. Calls inside C/CUDA code are not recorded.
 
-Recordings live in `.callnav/` and use your checkout's paths. Keep matching source, record again after moving or editing it, and add `.callnav/` to `.gitignore`. Review source paths and launch arguments before sharing records.
-
-[Detailed setup and troubleshooting](docs/usage.md) · [Contributing and tests](CONTRIBUTING.md) · [MIT license](LICENSE)
+[Development and tests](CONTRIBUTING.md) · [MIT license](LICENSE)

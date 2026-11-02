@@ -10,15 +10,13 @@
 
 Track Any Call 记录 Python 运行时的函数调用，用来确定动态绑定后实际执行的是哪个实现。遇到注册表加载的函数、抽象接口背后的子类方法等调用，可以在 VS Code 中根据本次运行的记录跳到实际执行的函数。
 
-录制器、安装包和编辑器命令目前都叫 CallNav。
-
 [English](README.md) · [详细用法](docs/usage.md) · [实现原理](docs/architecture.md)
 
 ## 安装
 
 需要工作区主机上的 **Python 3.11+** 和 **VS Code 1.85+**。
 
-从成功的 [Checks 构建](https://github.com/Zethan06/Track_any_call/actions/workflows/checks.yml)下载并解压 `callnav-release`，在 VS Code 执行 **Extensions: Install from VSIX…**，安装其中的 `.vsix`。插件内置录制器，无需 pip 安装或克隆源码。Remote-SSH 用户将插件安装到远程主机。
+从[最新 Release 下载 `callnav.vsix`](https://github.com/Zethan06/Track_any_call/releases/latest/download/callnav.vsix)，在 VS Code 执行 **Extensions: Install from VSIX…** 安装。插件内置录制器，无需 pip 安装或克隆源码。Remote-SSH 用户将插件安装到远程主机。
 
 从源码打包：在本仓库运行 `python vscode/scripts/package.py`。
 

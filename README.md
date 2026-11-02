@@ -10,15 +10,13 @@
 
 Track Any Call records Python calls at runtime to show which implementation a dynamically bound call actually used. For functions loaded from registries or subclass methods called through abstract interfaces, you can jump from the call site in VS Code to the implementation observed during the run.
 
-The recorder, packages, and editor commands currently use the name CallNav.
-
 [中文](README.zh-CN.md) · [Usage guide](docs/usage.md) · [How it works](docs/architecture.md)
 
 ## Install
 
 Requires **Python 3.11+** on the workspace host and **VS Code 1.85+**.
 
-Download `callnav-release` from a successful [Checks build](https://github.com/Zethan06/Track_any_call/actions/workflows/checks.yml), unzip it, and install the `.vsix` using **Extensions: Install from VSIX…**. The recorder is bundled; no pip installation or source checkout is needed. With Remote-SSH, install the extension on the remote host.
+Download [`callnav.vsix` from the latest release](https://github.com/Zethan06/Track_any_call/releases/latest/download/callnav.vsix) and install it using **Extensions: Install from VSIX…**. The recorder is bundled; no pip installation or source checkout is needed. With Remote-SSH, install the extension on the remote host.
 
 To build from source, run `python vscode/scripts/package.py` in this repository.
 

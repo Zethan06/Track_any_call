@@ -1,4 +1,4 @@
-# Track Any Call
+<h1 align="center">Track Any Call</h1>
 
 ## 🧩 背景
 
@@ -8,13 +8,21 @@
 
 Track Any Call 基于一次真实运行记录进行调用追踪。用户可直接跳转至该次运行中实际被调用的函数，而非依赖静态推断。这为大型项目的代码学习提供了可靠的导航路径。
 
-**Demo 1：Ray Actor 的远程方法分配**
+<p align="center"><strong>Demo 1：Ray Actor 的远程方法分配</strong></p>
 
-![Ray Actor 的远程方法分配](assert/demo1.gif)
+<p align="center">
+  <a href="assert/demo1.png">
+    <img src="assert/demo1.png" alt="Ray Actor 的远程方法分配" width="1192">
+  </a>
+</p>
 
-**Demo 2：配置驱动的函数分派**
+<p align="center"><strong>Demo 2：配置驱动的函数分派</strong></p>
 
-![配置驱动的函数分派](assert/demo2.gif)
+<p align="center">
+  <a href="assert/demo2.png">
+    <img src="assert/demo2.png" alt="配置驱动的函数分派" width="1192">
+  </a>
+</p>
 
 [English](README.md) · [详细用法](docs/usage.md) · [实现原理](docs/architecture.md)
 

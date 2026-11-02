@@ -23,7 +23,7 @@ FILES = (
     ".editorconfig", ".gitattributes", ".gitignore", "CONTRIBUTING.md", "LICENSE",
     "MANIFEST.in", "README.md", "README.zh-CN.md", "pyproject.toml",
     "docs/usage.md", "docs/architecture.md", "examples/README.md",
-    "assert/demo1.gif", "assert/demo2.gif",
+    "assert/demo1.png", "assert/demo2.png",
     "scripts/build_release.py", "scripts/benchmark_recorder.py",
     "vscode/package.json", "vscode/README.md",
     "vscode/language-configuration.json", "vscode/scripts/package.py",

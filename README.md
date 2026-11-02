@@ -1,4 +1,4 @@
-# Track Any Call
+<h1 align="center">Track Any Call</h1>
 
 ## 🧩 Background
 
@@ -8,13 +8,21 @@ When studying large projects such as verl and slime, many calls cannot be reliab
 
 Track Any Call traces calls recorded during a real run. Users can jump directly to the functions actually invoked in that run, rather than relying on static inference. This provides a reliable navigation path for studying large codebases.
 
-**Demo 1: Ray Actor remote method dispatch**
+<p align="center"><strong>Demo 1: Ray Actor remote method dispatch</strong></p>
 
-![Ray Actor remote method dispatch](assert/demo1.gif)
+<p align="center">
+  <a href="assert/demo1.png">
+    <img src="assert/demo1.png" alt="Ray Actor remote method dispatch" width="1192">
+  </a>
+</p>
 
-**Demo 2: Configuration-driven function dispatch**
+<p align="center"><strong>Demo 2: Configuration-driven function dispatch</strong></p>
 
-![Configuration-driven function dispatch](assert/demo2.gif)
+<p align="center">
+  <a href="assert/demo2.png">
+    <img src="assert/demo2.png" alt="Configuration-driven function dispatch" width="1192">
+  </a>
+</p>
 
 [中文](README.zh-CN.md) · [Usage guide](docs/usage.md) · [How it works](docs/architecture.md)
 

@@ -1,5 +1,13 @@
 # Track Any Call
 
+## 🧩 Background
+
+When studying large projects such as verl and slime, many calls cannot be reliably navigated using static analysis alone. Developers struggle to locate the function that actually runs, making it harder and more time-consuming to understand the codebase.
+
+## 🧭 Track Any Call
+
+Track Any Call traces calls recorded during a real run. Users can jump directly to the functions actually invoked in that run, rather than relying on static inference. This provides a reliable navigation path for studying large codebases.
+
 **Demo 1: Ray Actor remote method dispatch**
 
 ![Ray Actor remote method dispatch](assert/demo1.gif)
@@ -7,8 +15,6 @@
 **Demo 2: Configuration-driven function dispatch**
 
 ![Configuration-driven function dispatch](assert/demo2.gif)
-
-Track Any Call records Python calls at runtime to show which implementation a dynamically bound call actually used. For functions loaded from registries or subclass methods called through abstract interfaces, you can jump from the call site in VS Code to the implementation observed during the run.
 
 [中文](README.zh-CN.md) · [Usage guide](docs/usage.md) · [How it works](docs/architecture.md)
 

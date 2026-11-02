@@ -1,5 +1,13 @@
 # Track Any Call
 
+## 🧩 背景
+
+在学习 verl、slime 等大型项目时，存在大量无法通过静态代码分析完成跳转的调用。开发者难以定位实际执行的函数，学习过程如同在迷宫中摸索，效率低下。
+
+## 🧭 Track Any Call
+
+Track Any Call 基于一次真实运行记录进行调用追踪。用户可直接跳转至该次运行中实际被调用的函数，而非依赖静态推断。这为大型项目的代码学习提供了可靠的导航路径。
+
 **Demo 1：Ray Actor 的远程方法分配**
 
 ![Ray Actor 的远程方法分配](assert/demo1.gif)
@@ -7,8 +15,6 @@
 **Demo 2：配置驱动的函数分派**
 
 ![配置驱动的函数分派](assert/demo2.gif)
-
-Track Any Call 记录 Python 运行时的函数调用，用来确定动态绑定后实际执行的是哪个实现。遇到注册表加载的函数、抽象接口背后的子类方法等调用，可以在 VS Code 中根据本次运行的记录跳到实际执行的函数。
 
 [English](README.md) · [详细用法](docs/usage.md) · [实现原理](docs/architecture.md)
 

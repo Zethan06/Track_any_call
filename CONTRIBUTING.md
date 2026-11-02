@@ -16,7 +16,7 @@ source .venv/bin/activate
 python -m pip install -e '.[dev]'
 python -m ruff check .
 python -m unittest discover -s tests -v
-node --test vscode/test/unit.test.js
+node --test vscode/test/*.test.js
 ```
 
 The Ruff gate covers Python syntax, imports, and common programming errors.
@@ -32,7 +32,7 @@ The harness is `vscode/test/extension-host.js`; it is not a Node-only test.
 
 ## Optional Ray integration
 
-The Ray backend uses private hooks and was tested with Ray 2.58.0. The opt-in test
+The Ray backend uses private hooks and was tested with Ray 2.43.0 and 2.58.0. The opt-in test
 starts an isolated local CPU cluster and checks submission-to-worker joins.
 Run it only in an environment that can start Ray processes:
 
@@ -68,7 +68,9 @@ Keep the version in `pyproject.toml`, `src/callnav/__init__.py`, and
 `vscode/package.json` in sync. The builder checks this. Wheel installations
 contain only the Python package and metadata; the sdist/source archive also
 contain tests, examples, documentation, and extension source. The VSIX includes
-only extension runtime files, README, and the MIT license.
+extension runtime files, README, the MIT license, and the exact Python recorder
+sources under `python/callnav`; its backend is generated from `src/callnav`,
+never maintained as a second copy.
 
 ## Changes and reports
 

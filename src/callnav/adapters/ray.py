@@ -1,6 +1,6 @@
 """Opt-in Ray actor navigation, confirmed by actual worker function entries.
 
-Ray private hooks are isolated here. Tested against Ray 2.58; no arguments or
+Ray private hooks are isolated here. Tested against Ray 2.43 and 2.58; no arguments or
 return values are recorded. A submission alone never creates a navigable edge.
 """
 
@@ -351,12 +351,16 @@ def _patch_manager(module):
     if not callable(original):
         _warn("unsupported_execution_hook", "Ray has no compatible FunctionActorManager execution hook")
         return
+    if _collector is not None:
+        _collector.entry_observer = observe_entry
     if getattr(original, "__callnav_ray__", False):
         return
 
     @functools.wraps(original)
-    def make_executor(self, method_name, method):
-        executor = original(self, method_name, method)
+    def make_executor(self, method_name, method, *args, **kwargs):
+        # Ray 2.43 requires actor_imported; 2.58 omits it. Preserve the
+        # caller's exact arguments rather than imposing one private signature.
+        executor = original(self, method_name, method, *args, **kwargs)
         codes = _method_codes(method)
         if not codes:
             return executor
@@ -434,7 +438,8 @@ def install(collector):
     """Install without importing Ray, before the application's ray.init()."""
     global _collector, _finder
     _collector = collector
-    collector.entry_observer = observe_entry
+    # Import interception is always enabled. Entry observation starts only
+    # after Ray exposes an execution boundary that can create a receipt.
     if _finder is None:
         _finder = _Finder()
         sys.meta_path.insert(0, _finder)

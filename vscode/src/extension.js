@@ -3,6 +3,9 @@
 const vscode = require('vscode');
 const path = require('node:path');
 const { RuntimeIndex } = require('./index');
+const { Capture } = require('./capture');
+const { chooseRecording, readRecording } = require('./history');
+const { installTerminalCommand } = require('./terminal-command');
 
 const RUNTIME_LANGUAGE = 'runtime-python';
 let activeController;
@@ -13,15 +16,32 @@ class Controller {
     this.mode = false;
     this.switching = new Map();
     this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
+    this.capture = new Capture(context, this);
+    const installTerminal = async () => {
+      try { return await installTerminalCommand(context); }
+      catch (error) { this.capture.output.appendLine(`Terminal command unavailable: ${error.message}`); return null; }
+    };
+    this.terminalReady = installTerminal();
     const command = (name, action) => context.subscriptions.push(vscode.commands.registerCommand(name, async (...args) => {
       try { return await action(...args); }
       catch (error) { vscode.window.showErrorMessage(`CallNav: ${error.message}`); return false; }
     }));
     command('callnav.loadIndex', file => this.load(file));
     command('callnav.loadLatestIndex', () => this.load(this.latestPath()));
+    command('callnav.selectRecording', () => this.selectRecording());
+    command('callnav.installTerminalCommand', async () => {
+      this.terminalReady = installTerminal();
+      const installed = await this.terminalReady;
+      if (!installed) return false;
+      vscode.window.showInformationMessage('CallNav: terminal command enabled. Open a new terminal to use callnav.');
+      return true;
+    });
     command('callnav.toggleRuntimeNavigation', () => this.mode ? this.disable() : this.enable());
     command('callnav.enableRuntimeNavigation', () => this.enable());
     command('callnav.disableRuntimeNavigation', () => this.disable());
+    command('callnav.recordScript', (uri, options) => this.capture.recordScript(uri, options));
+    command('callnav.recordCommand', options => this.capture.recordCommand(options));
+    command('callnav.stopRecording', () => this.capture.stop());
     context.subscriptions.push(this.status,
       vscode.languages.registerDefinitionProvider('python', {
         provideDefinition: (document, position, token) => this.provideDefinition(document, position, token)
@@ -51,7 +71,7 @@ class Controller {
     return path.isAbsolute(expanded) ? expanded : path.resolve(folder?.uri.fsPath || process.cwd(), expanded);
   }
 
-  async load(file) {
+  async load(file, { quiet = false } = {}) {
     if (!file) {
       const selection = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'CallNav index': ['json'] } });
       if (!selection?.length) return false;
@@ -59,13 +79,37 @@ class Controller {
     }
     const filename = typeof file === 'string' ? file : file.fsPath;
     const index = await RuntimeIndex.load(filename);
+    return this.useIndex(index, { quiet });
+  }
+
+  async useIndex(index, { quiet = false } = {}) {
     const wasEnabled = this.mode;
     if (wasEnabled) await this.disable();
     this.index = index;
     this.issue = null;
     if (wasEnabled) await this.enable();
     this.updateStatus();
-    vscode.window.showInformationMessage(`CallNav: loaded ${index.runId}. ${this.mode ? 'Runtime navigation is enabled.' : 'Enable Runtime Navigation to use Ctrl/Cmd+click.'}`);
+    if (!quiet) vscode.window.showInformationMessage(`CallNav: loaded ${index.runId}. ${this.mode ? 'Runtime navigation is enabled.' : 'Enable Runtime Navigation to use Ctrl/Cmd+click.'}`);
+    return true;
+  }
+
+  async selectRecording() {
+    const active = vscode.window.activeTextEditor;
+    const selection = await chooseRecording({ folders: vscode.workspace.workspaceFolders,
+      activeFolder: active && vscode.workspace.getWorkspaceFolder(active.document.uri),
+      choose: (items, options) => vscode.window.showQuickPick(items, options),
+      inform: message => { vscode.window.showInformationMessage(message); } });
+    if (!selection) return false;
+    const selected = selection.recording;
+    const recording = selected.indexPath && await readRecording(selected.indexPath,
+      { root: selection.root, runId: selected.runId });
+    if (!recording?.usable) {
+      vscode.window.showWarningMessage(`CallNav: ${recording?.issue || selected.issue} Use Load Runtime Index to inspect partial data manually.`);
+      return false;
+    }
+    await this.useIndex(recording.index, { quiet: true });
+    await this.enable();
+    vscode.window.showInformationMessage(`CallNav: selected ${recording.runId}. Runtime navigation is enabled.`);
     return true;
   }
 
@@ -115,10 +159,16 @@ class Controller {
   }
 
   updateStatus() {
+    if (this.capture.state) {
+      this.status.text = '$(sync~spin) CallNav: recording';
+      this.status.command = 'callnav.stopRecording';
+      this.status.tooltip = 'Capture is running in a VS Code task. Click to stop; completed captures load automatically.';
+      return;
+    }
     if (!this.index) {
-      this.status.text = 'CallNav: load recording';
-      this.status.command = 'callnav.loadLatestIndex';
-      this.status.tooltip = 'Load .callnav/latest.json from this workspace.';
+      this.status.text = '$(record) CallNav: record script';
+      this.status.command = 'callnav.recordScript';
+      this.status.tooltip = 'Select a shell or Python script to capture. Existing recordings can be loaded from the Command Palette.';
       return;
     }
     const active = vscode.window.activeTextEditor?.document;

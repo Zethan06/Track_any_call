@@ -27,6 +27,9 @@ def activate():
         from .collector import start
 
         collector = start()
+        from .adapters import hydra
+
+        hydra.install(collector)
         if os.environ.get("CALLNAV_RAY") == "1":
             from .adapters import ray
 

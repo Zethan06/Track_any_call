@@ -144,7 +144,7 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(index["edges"][0]["target"]["qualname"], "failure")
         self.assertEqual(index["processes"][0]["status"], "complete")
 
-    def test_deferred_coroutines_resumes_and_generators_are_excluded(self):
+    def test_proven_run_entry_excludes_unproven_await_and_generator(self):
         path = self.write("run.py", """
             import asyncio
             def sync(): pass
@@ -163,7 +163,11 @@ class RecordTests(unittest.TestCase):
         process, index = self.record([sys.executable, str(path)])
         self.assertEqual(process.returncode, 0, process.stderr)
         targets = {edge["target"]["qualname"] for edge in index["edges"]}
-        self.assertEqual(targets, {"sync"})
+        self.assertEqual(targets, {"sync", "main"})
+        main = [edge for edge in index["edges"] if edge["target"]["qualname"] == "main"]
+        self.assertEqual(len(main), 1)
+        self.assertEqual(main[0]["kind"], "deferred")
+        self.assertEqual(main[0]["count"], 1)
         self.assertGreater(index["processes"][0]["excluded_resume_events"], 0)
 
     def test_immediate_await_maps_only_initial_entry(self):
@@ -299,26 +303,30 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(len(direct), 4, index["edges"])
         self.assertTrue(all(not edge["caller"].get("ambiguous") for edge in direct), direct)
 
-    def test_unresolved_callee_is_observed_but_not_falsely_navigable(self):
+    def test_immediate_returned_callee_is_precise_but_intervening_calls_remain_unknown(self):
         path = self.write("run.py", """
             from functools import partial
-            def work(): pass
+            def work(*args): pass
             def choose(): return work
+            def argument(): return 1
             choose()()
             indirect = partial(work)
             indirect()
+            choose()(argument())
         """)
         process, index = self.record([sys.executable, str(path)])
         self.assertEqual(process.returncode, 0, process.stderr)
         work = [edge for edge in index["edges"] if edge["target"]["qualname"] == "work"]
-        self.assertEqual(len(work), 2)
-        unknown = next(edge for edge in work if edge["caller"]["line"] == 4)
-        partial_edge = next(edge for edge in work if edge["caller"]["line"] == 6)
+        self.assertEqual(len(work), 3)
+        immediate = next(edge for edge in work if edge["caller"]["line"] == 5)
+        partial_edge = next(edge for edge in work if edge["caller"]["line"] == 7)
+        unknown = next(edge for edge in work if edge["caller"]["line"] == 8)
+        self.assertFalse(immediate["caller"].get("ambiguous"), immediate)
         self.assertTrue(unknown["caller"].get("ambiguous"), unknown)
         self.assertFalse(partial_edge["caller"].get("ambiguous"), partial_edge)
-        choose = next(edge for edge in index["edges"] if edge["target"]["qualname"] == "choose")
+        choose = [edge for edge in index["edges"] if edge["target"]["qualname"] == "choose"]
         if sys.version_info >= (3, 11):
-            self.assertFalse(choose["caller"].get("ambiguous"), choose)
+            self.assertTrue(all(not edge["caller"].get("ambiguous") for edge in choose), choose)
 
     def test_exact_partials_support_bound_methods_but_subclass_overrides_remain_real(self):
         path = self.write("run.py", """

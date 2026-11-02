@@ -2,28 +2,74 @@
   "name": "callnav",
   "displayName": "CallNav — Runtime Python Navigation",
   "description": "Jump from Python call sites to implementations observed in a recorded run.",
-  "version": "0.2.0",
+  "version": "0.6.10",
   "publisher": "callnav",
   "license": "MIT",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages", "Other"],
   "extensionKind": ["workspace"],
+  "capabilities": { "untrustedWorkspaces": { "supported": "limited", "description": "Runtime navigation is available; running capture scripts requires a trusted workspace." } },
   "main": "./src/extension.js",
-  "activationEvents": ["onLanguage:python", "onLanguage:runtime-python"],
-  "scripts": { "test": "node --test test/unit.test.js", "package": "python scripts/package.py" },
+  "activationEvents": ["onLanguage:python", "onLanguage:runtime-python", "onStartupFinished"],
+  "scripts": { "test": "node --test test/*.test.js", "package": "python scripts/package.py" },
   "contributes": {
     "commands": [
       { "command": "callnav.loadIndex", "title": "CallNav: Load Runtime Index…" },
       { "command": "callnav.loadLatestIndex", "title": "CallNav: Load Latest Runtime Index" },
+      { "command": "callnav.selectRecording", "title": "CallNav: Select Recording…" },
+      { "command": "callnav.installTerminalCommand", "title": "CallNav: Enable Terminal Command" },
       { "command": "callnav.toggleRuntimeNavigation", "title": "CallNav: Toggle Runtime Navigation" },
       { "command": "callnav.enableRuntimeNavigation", "title": "CallNav: Enable Runtime Navigation" },
-      { "command": "callnav.disableRuntimeNavigation", "title": "CallNav: Disable Runtime Navigation" }
+      { "command": "callnav.disableRuntimeNavigation", "title": "CallNav: Disable Runtime Navigation" },
+      { "command": "callnav.recordScript", "title": "CallNav: Record Script…", "icon": "$(record)" },
+      { "command": "callnav.recordCommand", "title": "CallNav: Record Command…" },
+      { "command": "callnav.stopRecording", "title": "CallNav: Stop Recording", "icon": "$(debug-stop)" }
     ],
+    "menus": {
+      "explorer/context": [{ "command": "callnav.recordScript", "when": "isWorkspaceTrusted && (resourceScheme == file || resourceScheme == vscode-remote) && resourceExtname =~ /\\.(sh|bash|py)$/", "group": "navigation@20" }],
+      "editor/title": [{ "command": "callnav.recordScript", "when": "isWorkspaceTrusted && (resourceScheme == file || resourceScheme == vscode-remote) && resourceExtname =~ /\\.(sh|bash|py)$/", "group": "navigation@20" }]
+    },
     "languages": [{ "id": "runtime-python", "aliases": ["Python (CallNav Runtime)"], "configuration": "./language-configuration.json" }],
     "grammars": [{ "language": "runtime-python", "scopeName": "source.callnav-python", "path": "./syntaxes/runtime-python.tmLanguage.json" }],
     "configuration": {
       "title": "CallNav",
       "properties": {
+        "callnav.pythonPath": {
+          "type": "string", "default": "",
+          "description": "Python 3.11+ on the workspace host. Relative executable paths resolve against the workspace folder; bare names use PATH. Empty uses the Python extension's selected interpreter, then python3 (python on Windows). No CallNav pip installation is needed."
+        },
+        "callnav.shellPath": {
+          "type": "string", "default": "bash",
+          "description": "Shell executable for .sh/.bash scripts and Record Command. Must support -c for commands."
+        },
+        "callnav.scriptArguments": {
+          "type": "array", "items": { "type": "string" }, "default": [],
+          "description": "Arguments passed literally to Record Script. For shell expansion or a different command, use Record Command."
+        },
+        "callnav.workingDirectory": {
+          "type": "string", "default": "${workspaceFolder}",
+          "description": "Capture working directory. Relative paths resolve against the chosen workspace folder."
+        },
+        "callnav.includeRoots": {
+          "type": "array", "items": { "type": "string" }, "default": [],
+          "description": "Additional source directories to record, such as Megatron-LM. Relative paths resolve against the workspace folder."
+        },
+        "callnav.ray": {
+          "type": "boolean", "default": false,
+          "description": "Record Ray Actor submission-to-worker calls. Workers must inherit the capture environment."
+        },
+        "callnav.adapter": {
+          "type": "string", "enum": ["", "slime"], "default": "",
+          "description": "Optional iteration-budget adapter. slime supports synchronous train.py only; for train_async.py or VERL set the step budget in the launch script."
+        },
+        "callnav.iterations": {
+          "type": "integer", "minimum": 1, "default": 1,
+          "description": "Outer-iteration budget when the slime adapter is selected."
+        },
+        "callnav.environment": {
+          "type": "object", "additionalProperties": { "type": "string" }, "default": {},
+          "description": "Environment variables for the capture, such as CUDA_VISIBLE_DEVICES. Applied on top of the workspace extension host's environment."
+        },
         "callnav.indexPath": {
           "type": "string",
           "default": "${workspaceFolder}/.callnav/latest.json",

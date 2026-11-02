@@ -1,0 +1,38 @@
+name: Release VSIX
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate tag and build artifacts
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          assert os.environ["GITHUB_REF_NAME"] == "v" + version, "Tag must match the package version"
+          PY
+          python -m pip install 'build>=1.2,<2'
+          python scripts/build_release.py --output dist/release
+          cp dist/release/*.vsix dist/release/callnav.vsix
+          cd dist/release
+          sha256sum callnav.vsix > callnav.vsix.sha256
+      - name: Publish tagged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/release/* \
+            --verify-tag --target "$GITHUB_SHA" --generate-notes

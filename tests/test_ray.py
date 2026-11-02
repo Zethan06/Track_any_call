@@ -1,5 +1,6 @@
 """Ray receipt joins plus an opt-in real, CPU-only Ray integration test."""
 
+import asyncio
 import hashlib
 import json
 import os
@@ -18,6 +19,80 @@ from callnav.adapters import ray as ray_adapter
 from callnav.collector import Source
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
+
+
+class RayExecutionHookTests(unittest.TestCase):
+    def check_executor(self, factory, method, *args, **kwargs):
+        manager_class = type("Manager", (), {"_make_actor_method_executor": factory})
+        module = SimpleNamespace(FunctionActorManager=manager_class)
+        ray_adapter._patch_manager(module)
+        manager = manager_class()
+        executor = manager._make_actor_method_executor("run", method, *args, **kwargs)
+        self.assertEqual(executor.name, "run")
+        self.assertIs(executor.method, method)
+        context = {"root_frame": None, "receipts": {}}
+        previous = ray_adapter._pending.get()
+        with mock.patch.object(ray_adapter, "_execution_context", return_value=context):
+            if asyncio.iscoroutinefunction(method):
+                result = asyncio.run(executor(41))
+            else:
+                result = executor(41)
+        self.assertEqual(result, 42)
+        self.assertIs(ray_adapter._pending.get(), previous)
+
+    @staticmethod
+    def method(value):
+        return value + 1
+
+    @staticmethod
+    def executor(method_name, method):
+        def execute(*args, **kwargs):
+            return method(*args, **kwargs)
+
+        execute.name = method_name
+        execute.method = method
+        return execute
+
+    def test_factory_without_import_flag_remains_supported(self):
+        def factory(manager, method_name, method):
+            return self.executor(method_name, method)
+
+        self.check_executor(factory, self.method)
+
+    def test_required_actor_imported_flag_is_forwarded_unchanged(self):
+        received = []
+
+        def factory(manager, method_name, method, actor_imported):
+            received.append(actor_imported)
+            return self.executor(method_name, method)
+
+        for args, kwargs in (((), {"actor_imported": True}),
+                             ((), {"actor_imported": False}), ((False,), {})):
+            with self.subTest(args=args, kwargs=kwargs):
+                self.check_executor(factory, self.method, *args, **kwargs)
+        self.assertEqual(received, [True, False, False])
+
+    def test_async_factory_preserves_import_flag_and_awaited_result(self):
+        def factory(manager, method_name, method, actor_imported):
+            self.assertIs(actor_imported, True)
+            return self.executor(method_name, method)
+
+        async def method(value):
+            await asyncio.sleep(0)
+            return value + 1
+
+        self.check_executor(factory, method, actor_imported=True)
+
+    def test_factory_extensions_and_exceptions_are_preserved(self):
+        sentinel = object()
+
+        def factory(manager, method_name, method, *args, **kwargs):
+            self.assertEqual(args, (sentinel,))
+            self.assertEqual(kwargs, {"option": sentinel})
+            raise RuntimeError("factory error")
+
+        with self.assertRaisesRegex(RuntimeError, "factory error"):
+            self.check_executor(factory, self.method, sentinel, option=sentinel)
 
 
 class RayMergeTests(unittest.TestCase):

@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: node --test vscode/test/unit.test.js
+      - run: node --test vscode/test/*.test.js
 
   packages:
     runs-on: ubuntu-latest
@@ -66,6 +66,40 @@ jobs:
           name: callnav-release
           path: dist/release/
           if-no-files-found: error
+
+  extension-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Exercise the packaged extension in VS Code
+        shell: bash
+        run: |
+          smoke_root=$(mktemp -d "$RUNNER_TEMP/callnav editor.XXXXXX")
+          python vscode/scripts/package.py --output "$smoke_root/callnav.vsix"
+          python -m venv --without-pip "$smoke_root/python"
+          mkdir "$smoke_root/workspace" "$smoke_root/driver"
+          cat > "$smoke_root/driver/package.json" <<'JSON'
+          {"name":"callnav-test-driver","publisher":"callnav-test","version":"0.0.1","engines":{"vscode":"^1.85.0"},"main":"./driver.js","activationEvents":["*"]}
+          JSON
+          printf 'exports.activate = () => {};\n' > "$smoke_root/driver/driver.js"
+          curl --fail --location --retry 3 https://update.code.visualstudio.com/1.85.2/linux-x64/stable -o "$smoke_root/code.tar.gz"
+          tar -xzf "$smoke_root/code.tar.gz" -C "$smoke_root"
+          "$smoke_root/VSCode-linux-x64/bin/code" --no-sandbox \
+            --user-data-dir="$smoke_root/user" --extensions-dir="$smoke_root/extensions" \
+            --install-extension "$smoke_root/callnav.vsix" --force
+          CALLNAV_EXPECT_INSTALLED=1 \
+          CALLNAV_CAPTURE_WORKSPACE="$smoke_root/workspace" \
+          CALLNAV_CAPTURE_PYTHON="$smoke_root/python/bin/python" \
+          xvfb-run -a "$smoke_root/VSCode-linux-x64/code" \
+            --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --user-data-dir="$smoke_root/user" --extensions-dir="$smoke_root/extensions" \
+            --extensionDevelopmentPath="$smoke_root/driver" \
+            --extensionTestsPath="$PWD/vscode/test/capture-host.js" \
+            --disable-workspace-trust --skip-welcome --skip-release-notes \
+            "$smoke_root/workspace"
 
   ray:
     if: github.event_name == 'workflow_dispatch' && inputs.ray_integration

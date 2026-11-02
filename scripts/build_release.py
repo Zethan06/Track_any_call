@@ -10,10 +10,12 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
+from xml.etree import ElementTree
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +23,8 @@ FILES = (
     ".editorconfig", ".gitattributes", ".gitignore", "CONTRIBUTING.md", "LICENSE",
     "MANIFEST.in", "README.md", "README.zh-CN.md", "pyproject.toml",
     "docs/usage.md", "docs/architecture.md", "examples/README.md",
-    "scripts/build_release.py", "vscode/package.json", "vscode/README.md",
+    "scripts/build_release.py", "scripts/benchmark_recorder.py",
+    "vscode/package.json", "vscode/README.md",
     "vscode/language-configuration.json", "vscode/scripts/package.py",
 )
 TREES = (
@@ -39,6 +42,19 @@ PRIVATE_CONTENT = tuple(
 PRIVATE_FILES = {"WORKSPACE.md", "verl-ray.md", "validation.md"}
 
 
+def source_bytes(root: Path, source: Path) -> bytes:
+    """Read a public source without following symlinked path components."""
+    relative = source.relative_to(root)
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"Missing public file or symlink: {relative}")
+    if not source.is_file():
+        raise ValueError(f"Missing public file or symlink: {relative}")
+    return source.read_bytes()
+
+
 def public_files(root: Path = ROOT) -> list[Path]:
     paths = {root / name for name in FILES}
     for folder, pattern in TREES:
@@ -50,9 +66,7 @@ def public_files(root: Path = ROOT) -> list[Path]:
         relative = source.relative_to(root)
         if any(part in PRIVATE_PARTS for part in relative.parts):
             raise ValueError(f"Private path in public file list: {relative}")
-        if not source.is_file() or source.is_symlink():
-            raise ValueError(f"Missing public file or symlink: {relative}")
-        check_content(relative.as_posix(), source.read_bytes())
+        check_content(relative.as_posix(), source_bytes(root, source))
     return sorted(paths)
 
 
@@ -116,15 +130,53 @@ def normalize_sdist(artifact: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def verify_archive(artifact: Path) -> None:
+def verify_vsix(archive: zipfile.ZipFile, root: Path) -> None:
+    """Require the installed extension to include the matching standalone recorder."""
+    expected = {
+        "extension/LICENSE": root / "LICENSE",
+        **{f"extension/{name}": root / "vscode" / name
+           for name in ("package.json", "README.md", "language-configuration.json")},
+    }
+    for folder, pattern, prefix in (
+        ("vscode/src", "*.js", "extension/src"),
+        ("vscode/syntaxes", "*.json", "extension/syntaxes"),
+        ("src/callnav", "*.py", "extension/python/callnav"),
+    ):
+        directory = root / folder
+        for source in directory.rglob(pattern):
+            expected[f"{prefix}/{source.relative_to(directory).as_posix()}"] = source
+    names = archive.namelist()
+    allowed = set(expected) | {"extension.vsixmanifest", "[Content_Types].xml"}
+    if len(names) != len(set(names)) or set(names) != allowed:
+        raise ValueError("VSIX members differ from the explicit extension runtime allowlist")
+    for name, source in expected.items():
+        if archive.read(name) != source_bytes(root, source):
+            raise ValueError(f"VSIX runtime does not match release source: {name}")
+    release = version(root)
+    package = json.loads(archive.read("extension/package.json"))
+    namespace = {"vsix": "http://schemas.microsoft.com/developer/vsx-schema/2011"}
+    try:
+        manifest = ElementTree.fromstring(archive.read("extension.vsixmanifest"))
+    except ElementTree.ParseError as error:
+        raise ValueError("Invalid VSIX manifest") from error
+    identity = manifest.find("vsix:Metadata/vsix:Identity", namespace)
+    if identity is None or identity.get("Version") != release or package["version"] != release:
+        raise ValueError("Python and VSIX manifest versions must match")
+
+
+def verify_archive(artifact: Path, *, root: Path = ROOT) -> None:
     if artifact.suffix in {".whl", ".vsix"}:
         with zipfile.ZipFile(artifact) as archive:
             for info in archive.infolist():
+                if stat.S_ISLNK(info.external_attr >> 16):
+                    raise ValueError(f"Link in runtime distribution: {info.filename}")
                 check_content(info.filename, archive.read(info))
                 if artifact.suffix == ".whl":
                     top = PurePosixPath(info.filename).parts[0]
                     if top != "callnav" and not top.endswith(".dist-info"):
                         raise ValueError(f"Unexpected wheel member: {info.filename}")
+            if artifact.suffix == ".vsix":
+                verify_vsix(archive, root)
     else:
         with tarfile.open(artifact, "r:gz") as archive:
             for info in archive.getmembers():

@@ -64,6 +64,18 @@ class WrapperMergeTests(unittest.TestCase):
         # One invocation did not reach the body; its wrapper cannot be erased.
         self.assertLess(combined["wrapper_forwarded_count"], combined["count"])
 
+    def test_later_worker_callback_dispatch_receipt_is_preserved(self):
+        raw = copy.deepcopy(self.edge)
+        raw.pop("via")
+        raw["kind"] = "registered"
+        uvloop = copy.deepcopy(raw)
+        uvloop.update(callback_dispatch="uvloop", process_ids=[2])
+        self.shard(1, [raw])
+        self.shard(2, [uvloop])
+        combined = merge(self.run)["edges"][0]
+        self.assertEqual(combined["count"], 2)
+        self.assertEqual(combined["callback_dispatch"], "uvloop")
+
 
 if __name__ == "__main__":
     unittest.main()

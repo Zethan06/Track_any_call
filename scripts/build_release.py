@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = (
     ".editorconfig", ".gitattributes", ".gitignore", "CONTRIBUTING.md", "LICENSE",
     "MANIFEST.in", "README.md", "README.zh-CN.md", "pyproject.toml",
-    "docs/usage.md", "docs/architecture.md", "examples/README.md",
+    "docs/usage.md", "docs/architecture.md", "examples/README.md", "assert/demo.gif",
     "scripts/build_release.py", "scripts/benchmark_recorder.py",
     "vscode/package.json", "vscode/README.md",
     "vscode/language-configuration.json", "vscode/scripts/package.py",

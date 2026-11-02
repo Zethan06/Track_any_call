@@ -1,6 +1,8 @@
-# Track_any_call
+# Track Any Call
 
-Track_any_call records Python calls at runtime to show which implementation a dynamically bound call actually used. For functions loaded from registries or subclass methods called through abstract interfaces, you can jump from the call site in VS Code to the implementation observed during the run.
+![CallNav demo](assert/demo.gif)
+
+Track Any Call records Python calls at runtime to show which implementation a dynamically bound call actually used. For functions loaded from registries or subclass methods called through abstract interfaces, you can jump from the call site in VS Code to the implementation observed during the run.
 
 The recorder, packages, and editor commands currently use the name CallNav.
 

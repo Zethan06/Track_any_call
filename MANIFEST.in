@@ -1,6 +1,7 @@
 include LICENSE README.md README.zh-CN.md CONTRIBUTING.md pyproject.toml MANIFEST.in
 include .editorconfig .gitattributes .gitignore
 include docs/usage.md docs/architecture.md
+include assert/demo.gif
 recursive-include .github/workflows *.yml
 recursive-include src/callnav *.py
 recursive-include tests *.py

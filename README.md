@@ -1,6 +1,12 @@
 # Track Any Call
 
-![CallNav demo](assert/demo.gif)
+**Demo 1: Ray Actor remote method dispatch**
+
+![Ray Actor remote method dispatch](assert/demo1.gif)
+
+**Demo 2: Configuration-driven function dispatch**
+
+![Configuration-driven function dispatch](assert/demo2.gif)
 
 Track Any Call records Python calls at runtime to show which implementation a dynamically bound call actually used. For functions loaded from registries or subclass methods called through abstract interfaces, you can jump from the call site in VS Code to the implementation observed during the run.
 

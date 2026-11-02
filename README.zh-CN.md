@@ -1,6 +1,12 @@
 # Track Any Call
 
-![CallNav 演示](assert/demo.gif)
+**Demo 1：Ray Actor 的远程方法分配**
+
+![Ray Actor 的远程方法分配](assert/demo1.gif)
+
+**Demo 2：配置驱动的函数分派**
+
+![配置驱动的函数分派](assert/demo2.gif)
 
 Track Any Call 记录 Python 运行时的函数调用，用来确定动态绑定后实际执行的是哪个实现。遇到注册表加载的函数、抽象接口背后的子类方法等调用，可以在 VS Code 中根据本次运行的记录跳到实际执行的函数。
 

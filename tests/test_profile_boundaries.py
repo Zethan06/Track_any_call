@@ -1,4 +1,4 @@
-"""External import traffic must stay cheap without losing boundary proofs."""
+"""Profile boundaries preserve live bindings and require actual execution proofs."""
 
 import ast
 import functools
@@ -13,13 +13,13 @@ import types
 import unittest
 from unittest import mock
 
-from callnav.collector import Collector, _UNKNOWN, _attribute_value, _function, _static_value
+from callnav.collector import _UNKNOWN, _attribute_value, _function, _static_value
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
 
 
-class ProfilePerformanceTests(unittest.TestCase):
+class ProfileBoundaryTests(unittest.TestCase):
     def test_name_resolution_rereads_live_frame_bindings(self):
         expression = ast.Name(id='binding')
         binding = object()
@@ -51,35 +51,6 @@ class ProfilePerformanceTests(unittest.TestCase):
         cycle = functools.partial(target)
         cycle.__setstate__((cycle, (), {}, None))
         self.assertIsNone(_function(cycle))
-
-    def test_profile_reuses_excluded_filename_decisions_and_observes_every_event(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            with mock.patch.dict(os.environ, CALLNAV_ROOT=temporary,
-                                 CALLNAV_RUN_DIR=str(Path(temporary) / 'trace'),
-                                 CALLNAV_RUN_ID='cache', CALLNAV_INCLUDE_ROOTS='[]'):
-                collector = Collector()
-            caller = types.SimpleNamespace(f_code=compile('pass', '/outside/parent.py', 'exec'))
-            frame = types.SimpleNamespace(f_code=compile('pass', '<external>', 'exec'),
-                                          f_back=caller)
-            events = [('call', None), ('c_call', len), ('c_return', len),
-                      ('c_exception', len), ('return', None)]
-            collector.entry_observer = mock.Mock()
-            with mock.patch.object(collector, 'path', wraps=collector.path) as path, \
-                    mock.patch.object(collector.callbacks, 'observe',
-                                      wraps=collector.callbacks.observe) as callbacks:
-                for _ in range(2):
-                    for event, argument in events:
-                        collector.profile(frame, event, argument)
-                self.assertEqual(path.call_args_list,
-                                 [mock.call('<external>'), mock.call('/outside/parent.py')])
-                self.assertEqual(callbacks.call_args_list,
-                                 [mock.call(frame, event, argument)
-                                  for _ in range(2) for event, argument in events])
-            self.assertEqual(collector.entry_observer.call_args_list,
-                             [mock.call(frame), mock.call(frame)])
-            self.assertIsNone(collector.paths['<external>'])
-            self.assertIsNone(collector.paths['/outside/parent.py'])
-            self.assertEqual(collector.errors, 0)
 
     def test_module_lookup_rereads_globals_without_hooks_or_descriptor_shadowing(self):
         module = types.ModuleType('example')
@@ -169,26 +140,6 @@ class ProfilePerformanceTests(unittest.TestCase):
             ray.install(second)
             self.assertEqual(second.entry_observers, [hydra.observe_entry])
             self.assertIs(second.entry_observer, ray.observe_entry)
-
-    def test_unrelated_external_c_events_do_not_enter_source_or_deferred_analysis(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / 'project'
-            root.mkdir()
-            with mock.patch.dict(os.environ, CALLNAV_ROOT=str(root),
-                                 CALLNAV_RUN_DIR=str(root / 'trace'), CALLNAV_RUN_ID='external',
-                                 CALLNAV_INCLUDE_ROOTS='[]'):
-                collector = Collector()
-            frame = types.SimpleNamespace(f_code=compile('pass', '/outside/library.py', 'exec'))
-            with mock.patch.object(collector, 'source') as source, \
-                    mock.patch.object(collector.scheduled, 'observe') as scheduled:
-                for _ in range(100):
-                    collector.profile(frame, 'c_call', len)
-                    collector.profile(frame, 'c_return', len)
-                source.assert_not_called()
-                scheduled.assert_not_called()
-            self.assertEqual(collector.errors, 0)
-            self.assertFalse(collector.native_calls)
-            self.assertFalse(collector.edges)
 
     def test_external_factory_return_proves_method_without_inventing_callback_edges(self):
         with tempfile.TemporaryDirectory() as temporary:

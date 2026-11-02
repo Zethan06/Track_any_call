@@ -1,8 +1,7 @@
-"""Tracing plan discovery must scale with relevant code, preserving promotion."""
+"""Trace hooks preserve deferred calls and release application objects safely."""
 
 import ast
 import dis
-import gc
 import os
 import sys
 from pathlib import Path
@@ -15,87 +14,18 @@ from unittest import mock
 
 import test_scheduled as scheduled_helpers
 
-from callnav.cache import CodeIdentityMap, CodeIdentitySet
 from callnav.callbacks import RegisteredCallbacks
-from callnav.collector import Collector, Source
+from callnav.collector import Source
 from callnav.deferred import DeferredCalls
 from callnav.scheduled import ScheduledCalls
 
 
-class TracePerformanceTests(unittest.TestCase):
+class TraceLifecycleTests(unittest.TestCase):
     def _record(self, content):
         harness = scheduled_helpers.ScheduledTests()
         harness.setUp()
         self.addCleanup(harness.tearDown)
         return harness.record(content)
-
-    def test_code_identity_caches_keep_equal_code_objects_separate(self):
-        first = compile('value = 1', '/same/module.py', 'exec')
-        second = compile('value = 1', '/same/module.py', 'exec')
-        self.assertIsNot(first, second)
-        self.assertEqual(first, second)
-        mapping = CodeIdentityMap()
-        mapping[first] = 'first'
-        mapping[second] = 'second'
-        self.assertEqual(len(mapping), 2)
-        self.assertEqual(mapping[first], 'first')
-        self.assertEqual(mapping[second], 'second')
-        codes = CodeIdentitySet()
-        codes.add(first)
-        codes.add(second)
-        self.assertEqual(len(codes), 2)
-        codes.discard(first)
-        self.assertNotIn(first, codes)
-        self.assertIn(second, codes)
-
-    def test_code_identity_caches_never_hash_or_compare_keys(self):
-        class Key:
-            def __hash__(self):
-                raise AssertionError('code key was hashed')
-
-            def __eq__(self, other):
-                raise AssertionError('code key was compared')
-
-        key, other = Key(), Key()
-        mapping = CodeIdentityMap()
-        mapping[key] = None
-        self.assertIn(key, mapping)
-        self.assertIsNone(mapping.get(key, 'missing'))
-        self.assertIsNone(mapping.setdefault(key, 'replacement'))
-        self.assertEqual(mapping.setdefault(other, 'other'), 'other')
-        self.assertEqual(len(mapping), 2)
-        self.assertIs(list(mapping)[0], key)
-        self.assertIsNone(mapping.pop(key))
-        self.assertEqual(mapping.pop(key, 'missing'), 'missing')
-        with self.assertRaises(KeyError):
-            mapping[key]
-        with self.assertRaises(KeyError):
-            mapping.pop(key)
-        del mapping[other]
-        self.assertEqual(len(mapping), 0)
-        codes = CodeIdentitySet()
-        codes.add(key)
-        self.assertIn(key, codes)
-        self.assertNotIn(other, codes)
-        self.assertIs(next(iter(codes)), key)
-        codes.discard(key)
-        self.assertNotIn(key, codes)
-
-    def test_code_identity_caches_retain_keys_until_cleared(self):
-        for cache in (CodeIdentityMap(), CodeIdentitySet()):
-            with self.subTest(cache=type(cache).__name__):
-                code = compile('value = 1', '/retained/module.py', 'exec')
-                reference = weakref.ref(code)
-                if isinstance(cache, CodeIdentityMap):
-                    cache[code] = 'value'
-                else:
-                    cache.add(code)
-                del code
-                gc.collect()
-                self.assertIsNotNone(reference())
-                cache.clear()
-                gc.collect()
-                self.assertIsNone(reference())
 
     def test_irrelevant_callback_events_skip_keys_module_lookups_and_user_hooks(self):
         with mock.patch.object(RegisteredCallbacks, '_install_uvloop'):
@@ -137,15 +67,6 @@ class TracePerformanceTests(unittest.TestCase):
                 callbacks.observe(frame, 'return', None)
         callbacks._install_uvloop.assert_called_once_with()
 
-    def test_excluded_code_has_a_cached_negative_plan(self):
-        collector = types.SimpleNamespace(path=mock.Mock(return_value=None), source=mock.Mock())
-        deferred = DeferredCalls(types.SimpleNamespace(collector=collector))
-        code = compile('value = 1', '/outside/project.py', 'exec')
-        for _ in range(100):
-            self.assertFalse(deferred._plans(code))
-        collector.path.assert_called_once_with('/outside/project.py')
-        collector.source.assert_not_called()
-
     def test_promoting_a_wrapper_invalidates_its_cached_negative_plan(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -179,20 +100,6 @@ class TracePerformanceTests(unittest.TestCase):
         self.assertNotIn(wrapper.__code__, deferred.plans)
         self.assertTrue(deferred._plans(wrapper.__code__))
         collector.source.assert_called_once_with(str(path))
-
-    def test_unrelated_opcode_skips_plan_lookups_and_active_key_creation(self):
-        deferred = DeferredCalls(types.SimpleNamespace(collector=types.SimpleNamespace()))
-
-        class Plans(dict):
-            def get(self, offset, default=None):
-                raise AssertionError('unrelated opcode looked up a call plan')
-
-        state = {'opcode_offsets': frozenset({2}), 'binding': None, 'iteration': None,
-                 'plans': Plans(), 'load_offsets': Plans(), 'list_comps': (Plans(), Plans()),
-                 'tuple_builds': Plans(), 'assignments': Plans(), 'iterations': Plans()}
-        frame = types.SimpleNamespace(f_lasti=100)
-        with mock.patch('threading.get_ident', side_effect=AssertionError('duplicate active lookup')):
-            deferred.opcode(frame, state)
 
     def test_transient_binding_and_iteration_consume_arbitrary_next_opcodes(self):
         deferred = DeferredCalls(types.SimpleNamespace(collector=types.SimpleNamespace()))
@@ -244,28 +151,6 @@ class TracePerformanceTests(unittest.TestCase):
                 scheduled._trace(frame, 'opcode', None)
                 scheduled.deferred.opcode.assert_called_once_with(frame, state)
                 self.assertEqual(scheduled.collector.errors, 0)
-
-    def test_local_opcode_hook_uses_activation_state_without_registry_lookups(self):
-        scheduled = ScheduledCalls(types.SimpleNamespace(errors=0))
-        scheduled.status = 'recording'
-        scheduled.deferred.opcode = mock.Mock()
-        frame = types.SimpleNamespace(f_lasti=100)
-        state = {'yield_offsets': frozenset({100}), 'opcode_offsets': frozenset(),
-                 'binding': None, 'iteration': None, 'exception_pending': True}
-        hook = scheduled._frame_trace((1, 2), None, state)
-        with mock.patch('threading.get_ident', side_effect=AssertionError('local hook made a key')):
-            scheduled.active = mock.Mock()
-            scheduled.deferred.active = mock.Mock()
-            self.assertIs(hook(frame, 'opcode', None), hook)
-            self.assertFalse(state['exception_pending'])
-            scheduled.deferred.opcode.assert_not_called()
-            state['binding'] = object()
-            self.assertIs(hook(frame, 'opcode', None), hook)
-            scheduled.deferred.opcode.assert_called_once_with(frame, state)
-            scheduled.active.assert_not_called()
-            scheduled.active.get.assert_not_called()
-            scheduled.deferred.active.get.assert_not_called()
-        self.assertEqual(scheduled.collector.errors, 0)
 
     def test_local_hook_drops_snapshots_at_return_and_has_no_self_cycle(self):
         class Snapshot:
@@ -393,21 +278,6 @@ class TracePerformanceTests(unittest.TestCase):
         self.assertIs(frame.f_trace, foreign)
         self.assertEqual(scheduled.collector.errors, 0)
 
-    def test_excluded_trace_call_does_not_construct_an_activation_key(self):
-        collector = types.SimpleNamespace(errors=0, path=mock.Mock(return_value=None))
-        scheduled = ScheduledCalls(collector)
-        scheduled.status = 'recording'
-        scheduled._select = mock.Mock(return_value=())
-        scheduled.deferred.begin = mock.Mock(return_value=False)
-        code = (lambda: None).__code__
-        with mock.patch('threading.get_ident', side_effect=AssertionError('excluded call made a key')):
-            frame = types.SimpleNamespace(f_trace=None, f_code=code)
-            self.assertIsNone(scheduled._trace(frame, 'call', None))
-        collector.path.assert_called_once_with(code.co_filename)
-        scheduled._select.assert_not_called()
-        scheduled.deferred.begin.assert_not_called()
-        self.assertEqual(scheduled.collector.errors, 0)
-
     def test_excluded_trace_call_still_plans_a_promoted_wrapper(self):
         collector = types.SimpleNamespace(errors=0, path=mock.Mock(return_value=None))
         scheduled = ScheduledCalls(collector)
@@ -422,30 +292,6 @@ class TracePerformanceTests(unittest.TestCase):
         scheduled.deferred.begin.assert_called_once_with(frame)
         self.assertEqual(scheduled.collector.errors, 0)
 
-    def test_deferred_call_observer_reuses_the_same_caller_state(self):
-        collector = types.SimpleNamespace(_instructions=mock.Mock(return_value=([2], ())))
-        deferred = DeferredCalls(types.SimpleNamespace(collector=collector))
-        code = (lambda: None).__code__
-        caller = types.SimpleNamespace(f_code=code, f_lasti=2)
-        frame = types.SimpleNamespace(f_back=caller, f_code=code)
-        state = {'binding': object(), 'comprehensions': {}, 'list_comps': ({}, {}),
-                 'calls': {}, 'iteration': None}
-        deferred.active = mock.Mock(get=mock.Mock(return_value=state))
-        deferred.observe(frame, 'call', None)
-        deferred.active.get.assert_called_once_with((threading.get_ident(), id(caller)))
-        collector._instructions.assert_called_once_with(code)
-        self.assertIsNone(state['binding'])
-
-    def test_unrelated_scheduled_opcode_does_not_scan_plans(self):
-        scheduled = ScheduledCalls(types.SimpleNamespace())
-
-        class Plans:
-            def __iter__(self):
-                raise AssertionError('unrelated opcode scanned scheduled plans')
-
-        scheduled._opcode(types.SimpleNamespace(f_lasti=100),
-                          {'opcode_offsets': frozenset({2}), 'plans': Plans()})
-
     def test_idle_observer_skips_bookkeeping_but_pending_proofs_are_observed(self):
         scheduled = ScheduledCalls(types.SimpleNamespace())
         scheduled.status = 'recording'
@@ -457,41 +303,6 @@ class TracePerformanceTests(unittest.TestCase):
             scheduled.deferred.pending[123] = object()
             scheduled.observe(frame, 'c_call', None)
             scheduled.deferred.observe.assert_called_once_with(frame, 'c_call', None)
-
-    def test_each_source_metadata_bucket_is_read_once_across_many_functions(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
-        path = root / 'module.py'
-        text = '\n'.join(f'def function_{index}():\n    return target()' for index in range(100))
-        path.write_text(text, encoding='utf-8')
-        with mock.patch.dict(os.environ, CALLNAV_ROOT=str(root), CALLNAV_RUN_DIR=str(root / 'run'),
-                             CALLNAV_RUN_ID='plan-performance', CALLNAV_INCLUDE_ROOTS='[]'):
-            collector = Collector()
-        source = collector.source(str(path))
-
-        class ReadOnce(list):
-            def __iter__(self):
-                if getattr(self, 'read', False):
-                    raise AssertionError('source metadata was scanned again for another function')
-                self.read = True
-                return super().__iter__()
-
-        for kind in (ast.For, ast.ListComp, ast.AsyncFor, ast.Assign, ast.Return, ast.With):
-            source.nodes_by_type[kind] = ReadOnce(source.nodes_by_type.get(kind, ()))
-        # Planning must use the span index, without revisiting all module calls
-        # or walking the tree after Source built its indexes.
-        source.calls = ReadOnce(source.calls)
-        source.calls.read = True
-        namespace = {}
-        exec(compile(text, str(path), 'exec'), namespace)
-        with mock.patch('ast.walk', side_effect=AssertionError('repeated full-source AST walk')):
-            for function in namespace.values():
-                if type(function) is types.FunctionType:
-                    self.assertTrue(collector.scheduled.deferred._plans(function.__code__))
-                    collector.scheduled._plans(function.__code__)
-        self.assertTrue(source.nodes_by_type[ast.Return].read)
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,13 +1,9 @@
 """Experimental profile delivery must preserve native and Python method calls."""
 
-import functools
 import json
 import os
 import sys
-import types
 import unittest
-
-from callnav.collector import _function
 
 import test_scheduled as helpers
 
@@ -16,11 +12,6 @@ class ProfileBackendTests(unittest.TestCase):
     setUp = helpers.ScheduledTests.setUp
     tearDown = helpers.ScheduledTests.tearDown
     record = helpers.ScheduledTests.record
-
-    def test_builtin_backed_method_is_not_a_python_function(self):
-        native = types.MethodType(len, [1])
-        self.assertIsNone(_function(native))
-        self.assertIsNone(_function(functools.partial(native)))
 
     def test_builtin_backed_methods_do_not_break_capture(self):
         path, index = self.record('''

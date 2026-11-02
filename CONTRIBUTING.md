@@ -30,6 +30,11 @@ missing worker receipts, and wrappers that did not forward. Unit tests exercise
 the resolver; actual editor behavior requires a genuine VS Code extension host.
 The harness is `vscode/test/extension-host.js`; it is not a Node-only test.
 
+Prefer assertions about recorded targets, application behavior, hook ownership,
+and resource cleanup. Avoid tests that only lock in internal dictionary lookups
+or exact helper-call counts. Use `scripts/benchmark_recorder.py` for comparative
+timing; keep one-off experiment fixtures and reports outside the portable suite.
+
 ## Optional Ray integration
 
 The Ray backend uses private hooks and was tested with Ray 2.43.0 and 2.58.0. The opt-in test
